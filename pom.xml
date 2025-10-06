@@ -50,7 +50,7 @@
       <artifactId>mysql-connector-java</artifactId>
       <scope>runtime</scope>
     </dependency>
-    <!-- REMOVA a duplicata do tomcat (você tinha duas iguais) -->
+    <!-- REMOVA a duplicata do tomcat (vocÃª tinha duas iguais) -->
     <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-tomcat</artifactId>
