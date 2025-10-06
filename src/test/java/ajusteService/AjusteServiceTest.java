@@ -163,7 +163,7 @@ public class AjusteServiceTest {
     	verify(ajusteRepositoryMock).save(any(Ajuste.class));
     }
     
-    @SuppressWarnings("unchecked") // Remove o aviso do compilador que era exibido na linha 174
+    @SuppressWarnings("unchecked") // Remove o aviso do compilador que era exibido na linha 175
     @Test
     @DisplayName("Testa a lista com filtro de código")
     void testeListaComFiltroCodigo() {
