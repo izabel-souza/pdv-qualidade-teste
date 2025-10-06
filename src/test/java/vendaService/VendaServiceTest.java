@@ -3,7 +3,6 @@ package vendaService;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
-import java.security.Timestamp;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
@@ -77,22 +76,18 @@ class VendaServiceTest {
             app.when(net.originmobi.pdv.singleton.Aplicacao::getInstancia).thenReturn(aplicacaoMock);
             when(aplicacaoMock.getUsuarioAtual()).thenReturn("natalia");
 
-            
             Usuario usuario = new Usuario();
             usuario.setUser("natalia");
             when(usuarios.buscaUsuario("natalia")).thenReturn(usuario);
 
-            
             when(vendas.save(any(Venda.class))).thenAnswer(inv -> {
                 Venda v = inv.getArgument(0);
                 v.setCodigo(123L);
                 return v;
             });
 
-            
             Long idGerado = vendaService.abreVenda(venda);
 
-            
             assertEquals(123L, idGerado, "deve retornar o código atribuído pelo repository");
             assertEquals(VendaSituacao.ABERTA, venda.getSituacao(), "deve marcar como ABERTA");
             assertEquals(0.00, venda.getValor_produtos(), 0.0001, "deve iniciar valor_produtos em 0.00");
@@ -222,12 +217,361 @@ class VendaServiceTest {
         assertEquals(todas, vendaService.lista());
     }
 
-
     @Test
     @DisplayName("qtdAbertos(): deve retornar total de vendas em aberto")
     void qtdAbertos_deveRetornarTotalDeVendasEmAberto() {
         when(vendas.qtdVendasEmAberto()).thenReturn(42);
         assertEquals(42, vendaService.qtdAbertos());
+    }
+    
+    @Test
+    @DisplayName("fechaVenda(): se for à vista (00) com DIN e caixa aberto deve fechar venda, lançar no caixa e movimentar estoque")
+    void fechaVenda_fluxoVistaDinheiro_comSucesso_deveFecharVenda_movimentarEstoque_eRetornarMensagem() {
+        Long codVenda = 7L;
+        Long codForma = 100L;
+        double vlProdutos = 200.00;
+        double desconto = 20.00;
+        double acrescimo = 5.00;
+        String[] vlParcelas = new String[] {"200.00"};
+        String[] titulos = new String[] {"1"};
+
+        Venda venda = mock(Venda.class);
+        when(vendas.findByCodigoEquals(codVenda)).thenReturn(venda);
+        when(venda.isAberta()).thenReturn(true);
+        when(venda.getPessoa()).thenReturn(new Pessoa());
+
+        PagamentoTipo forma = new PagamentoTipo();
+        forma.setCodigo(codForma);
+        forma.setFormaPagamento("00");
+        when(formaPagamentos.busca(codForma)).thenReturn(forma);
+
+        Titulo titulo = mock(Titulo.class);
+        net.originmobi.pdv.model.TituloTipo tituloTipo = mock(net.originmobi.pdv.model.TituloTipo.class);
+        when(titulo.getTipo()).thenReturn(tituloTipo);
+        when(tituloTipo.getSigla()).thenReturn(TituloTipo.DIN.toString());
+        when(tituloService.busca(1L)).thenReturn(Optional.of(titulo));
+
+        when(caixas.caixaIsAberto()).thenReturn(true);
+        when(caixas.caixaAberto()).thenReturn(Optional.of(new Caixa()));
+
+        try (MockedStatic<net.originmobi.pdv.singleton.Aplicacao> app = mockStatic(net.originmobi.pdv.singleton.Aplicacao.class)) {
+            net.originmobi.pdv.singleton.Aplicacao aplicacaoMock = mock(net.originmobi.pdv.singleton.Aplicacao.class);
+            app.when(net.originmobi.pdv.singleton.Aplicacao::getInstancia).thenReturn(aplicacaoMock);
+            when(aplicacaoMock.getUsuarioAtual()).thenReturn("natalia");
+
+            Usuario u = new Usuario();
+            u.setUser("natalia");
+            when(usuarios.buscaUsuario("natalia")).thenReturn(u);
+
+            String msg = vendaService.fechaVenda(codVenda, codForma, vlProdutos, desconto, acrescimo, vlParcelas, titulos);
+
+            assertEquals("Venda finalizada com sucesso", msg);
+            double vlFinal = (vlProdutos + acrescimo) - desconto;
+            verify(receberServ).cadastrar(any(Receber.class));
+            verify(vendas, atLeastOnce()).fechaVenda(eq(codVenda), eq(VendaSituacao.FECHADA), eq(vlFinal),
+                    eq(desconto), eq(acrescimo), any(), eq(forma));
+            verify(produtos).movimentaEstoque(eq(codVenda), eq(net.originmobi.pdv.enumerado.EntradaSaida.SAIDA));
+            verify(lancamentos).lancamento(any(CaixaLancamento.class));
+            verify(parcelas, never()).gerarParcela(anyDouble(), anyDouble(), anyDouble(), anyDouble(), anyDouble(),
+                    any(Receber.class), anyInt(), anyInt(), any(), any());
+            verify(cartaoLancamento, never()).lancamento(anyDouble(), any());
+        }
+    }
+
+    @Test
+    @DisplayName("fechaVenda(): se venda não estiver aberta deve retornar 'venda fechada'")
+    void fechaVenda_quandoVendaFechada_deveLancarExcecao() {
+        Long codVenda = 1L;
+        Venda venda = mock(Venda.class);
+        when(vendas.findByCodigoEquals(codVenda)).thenReturn(venda);
+        when(venda.isAberta()).thenReturn(false);
+
+        RuntimeException ex = assertThrows(RuntimeException.class, () ->
+                vendaService.fechaVenda(codVenda, 10L, 100.0, 0.0, 0.0, new String[]{"100.0"}, new String[]{"1"}));
+        assertEquals("venda fechada", ex.getMessage());
+    }
+
+    @Test
+    @DisplayName("fechaVenda(): se valor de produtos <= 0 deve retornar 'Venda sem valor, verifique'")
+    void fechaVenda_quandoValorProdutoInvalido_deveLancarExcecao() {
+        Long codVenda = 1L;
+        Venda venda = mock(Venda.class);
+        when(vendas.findByCodigoEquals(codVenda)).thenReturn(venda);
+        when(venda.isAberta()).thenReturn(true);
+
+        RuntimeException ex = assertThrows(RuntimeException.class, () ->
+                vendaService.fechaVenda(codVenda, 10L, 0.0, 0.0, 0.0, new String[]{"0.0"}, new String[]{"1"}));
+        assertEquals("Venda sem valor, verifique", ex.getMessage());
+    }
+
+    @Test
+    @DisplayName("fechaVenda(): se for à vista (00) com DIN e caixa fechado deve retornar 'nenhum caixa aberto'")
+    void fechaVenda_quandoCaixaFechadoParaVistaDinheiro_deveLancarExcecao() {
+        Long codVenda = 2L;
+        Venda venda = mock(Venda.class);
+        when(vendas.findByCodigoEquals(codVenda)).thenReturn(venda);
+        when(venda.isAberta()).thenReturn(true);
+        when(venda.getPessoa()).thenReturn(new Pessoa());
+
+        PagamentoTipo forma = new PagamentoTipo();
+        forma.setFormaPagamento("00"); 
+        when(formaPagamentos.busca(20L)).thenReturn(forma);
+
+        Titulo titulo = mock(Titulo.class);
+        net.originmobi.pdv.model.TituloTipo tituloTipo = mock(net.originmobi.pdv.model.TituloTipo.class);
+        when(titulo.getTipo()).thenReturn(tituloTipo);
+        when(tituloTipo.getSigla()).thenReturn(TituloTipo.DIN.toString());
+        when(tituloService.busca(1L)).thenReturn(Optional.of(titulo));
+
+        when(caixas.caixaIsAberto()).thenReturn(false);
+
+        RuntimeException ex = assertThrows(RuntimeException.class, () ->
+                vendaService.fechaVenda(codVenda, 20L, 100.0, 0.0, 0.0, new String[]{"100.0"}, new String[]{"1"}));
+        assertEquals("nenhum caixa aberto", ex.getMessage());
+    }
+    
+    @Test
+    @DisplayName("fechaVenda(): se for a prazo e venda não tiver cliente deve retornar 'Venda sem cliente, verifique'")
+    void fechaVenda_quandoAprazoSemCliente_deveLancarExcecao() {
+        Long codVenda = 10L, codForma = 400L;
+        String[] vlParcelas = {"100.00"};
+        String[] titulos = {"1"};
+
+        Venda venda = mock(Venda.class);
+        when(vendas.findByCodigoEquals(codVenda)).thenReturn(venda);
+        when(venda.isAberta()).thenReturn(true);
+        when(venda.getPessoa()).thenReturn(null);
+
+        PagamentoTipo forma = new PagamentoTipo();
+        forma.setCodigo(codForma);
+        forma.setFormaPagamento("30"); 
+        when(formaPagamentos.busca(codForma)).thenReturn(forma);
+        when(tituloService.busca(1L)).thenReturn(Optional.of(mock(Titulo.class)));
+
+        RuntimeException ex = assertThrows(RuntimeException.class, () ->
+            vendaService.fechaVenda(codVenda, codForma, 100.0, 0.0, 0.0, vlParcelas, titulos)
+        );
+        assertEquals("Venda sem cliente, verifique", ex.getMessage());
+    }
+
+    @Test
+    @DisplayName("fechaVenda(): se for a prazo deve gerar parcelas e fechar venda")
+    void fechaVenda_quandoAprazo_deveGerarParcelasEFechar() {
+        Long codVenda = 9L, codForma = 300L;
+        String[] vlParcelas = {"100.00", "100.00"};
+        String[] titulos = {"1","2"}; 
+        Venda venda = mock(Venda.class);
+        when(vendas.findByCodigoEquals(codVenda)).thenReturn(venda);
+        when(venda.isAberta()).thenReturn(true);
+        when(venda.getPessoa()).thenReturn(new Pessoa());
+
+        PagamentoTipo forma = new PagamentoTipo();
+        forma.setCodigo(codForma);
+        forma.setFormaPagamento("30/60"); 
+        when(formaPagamentos.busca(codForma)).thenReturn(forma);
+
+        when(tituloService.busca(anyLong())).thenReturn(Optional.of(mock(Titulo.class)));
+
+        String msg = vendaService.fechaVenda(codVenda, codForma, 200.00, 0.0, 0.0, vlParcelas, titulos);
+
+        assertEquals("Venda finalizada com sucesso", msg);
+        verify(parcelas, atLeast(2)).gerarParcela(anyDouble(), anyDouble(), anyDouble(), anyDouble(), anyDouble(),
+                any(Receber.class), anyInt(), anyInt(), any(), any());
+        verify(vendas, atLeastOnce()).fechaVenda(eq(codVenda), eq(VendaSituacao.FECHADA), eq(Double.valueOf(200.00)),
+        		eq(Double.valueOf(0.0)), eq(Double.valueOf(0.0)), any(java.sql.Timestamp.class), eq(forma));
+        verify(produtos).movimentaEstoque(eq(codVenda), eq(EntradaSaida.SAIDA));
+    }
+
+    @Test
+    @DisplayName("fechaVenda(): se for à vista (00) com CARTDEB/CARTCRED deve lançar no cartão")
+    void fechaVenda_quandoCartao_deveChamarCartaoLancamento() {
+        Long codVenda = 8L, codForma = 200L;
+        String[] vlParcelas = {"150.00"};
+        String[] titulos = {"1"};
+
+        Venda venda = mock(Venda.class);
+        when(vendas.findByCodigoEquals(codVenda)).thenReturn(venda);
+        when(venda.isAberta()).thenReturn(true);
+        when(venda.getPessoa()).thenReturn(new Pessoa());
+
+        PagamentoTipo forma = new PagamentoTipo();
+        forma.setCodigo(codForma);
+        forma.setFormaPagamento("00");
+        when(formaPagamentos.busca(codForma)).thenReturn(forma);
+
+        Titulo titulo = mock(Titulo.class);
+        net.originmobi.pdv.model.TituloTipo tt = mock(net.originmobi.pdv.model.TituloTipo.class);
+        when(titulo.getTipo()).thenReturn(tt);
+        when(tt.getSigla()).thenReturn(TituloTipo.CARTDEB.toString()); 
+        when(tituloService.busca(1L)).thenReturn(Optional.of(titulo));
+
+        String msg = vendaService.fechaVenda(codVenda, codForma, 150.00, 0.0, 0.0, vlParcelas, titulos);
+
+        assertEquals("Venda finalizada com sucesso", msg);
+        verify(cartaoLancamento).lancamento(eq(150.00), any()); 
+        verify(lancamentos, never()).lancamento(any(CaixaLancamento.class)); 
+        verify(produtos).movimentaEstoque(eq(codVenda), eq(EntradaSaida.SAIDA));
+    }
+    
+    @Test
+    @DisplayName("fechaVenda(): se falhar ao cadastrar o Receber deve retornar 'Erro ao fechar a venda, chame o suporte'")
+    void fechaVenda_quandoFalhaAoCadastrarReceber_deveRetornarErro() {
+        Long codVenda = 55L, codForma = 500L;
+        Venda venda = mock(Venda.class);
+        when(vendas.findByCodigoEquals(codVenda)).thenReturn(venda);
+        when(venda.isAberta()).thenReturn(true);
+        when(venda.getPessoa()).thenReturn(new Pessoa());
+
+        PagamentoTipo forma = new PagamentoTipo();
+        forma.setCodigo(codForma);
+        forma.setFormaPagamento("00"); 
+        when(formaPagamentos.busca(codForma)).thenReturn(forma);
+
+        doThrow(new RuntimeException("falha qualquer"))
+            .when(receberServ).cadastrar(any(Receber.class));
+
+        RuntimeException ex = assertThrows(RuntimeException.class, () ->
+            vendaService.fechaVenda(codVenda, codForma, 100.0, 0.0, 0.0,
+                new String[]{"100.0"}, new String[]{"1"})
+        );
+        assertEquals("Erro ao fechar a venda, chame o suporte", ex.getMessage());
+    }
+
+    @Test
+    @DisplayName("fechaVenda(): se falhar ao fechar a venda deve retornar 'Erro ao fechar a venda, chame o suporte'")
+    void fechaVenda_quandoFalhaAoFechar_deveRetornarErro() {
+        Long codVenda = 66L, codForma = 600L;
+        String[] vlParcelas = {"200.00"};
+        String[] titulos = {"1"};
+
+        Venda venda = mock(Venda.class);
+        when(vendas.findByCodigoEquals(codVenda)).thenReturn(venda);
+        when(venda.isAberta()).thenReturn(true);
+        when(venda.getPessoa()).thenReturn(new Pessoa());
+
+        PagamentoTipo forma = new PagamentoTipo();
+        forma.setCodigo(codForma);
+        forma.setFormaPagamento("00");
+        when(formaPagamentos.busca(codForma)).thenReturn(forma);
+
+        Titulo titulo = mock(Titulo.class);
+        net.originmobi.pdv.model.TituloTipo tt = mock(net.originmobi.pdv.model.TituloTipo.class);
+        when(titulo.getTipo()).thenReturn(tt);
+        when(tt.getSigla()).thenReturn(TituloTipo.DIN.toString());
+        when(tituloService.busca(1L)).thenReturn(Optional.of(titulo));
+
+        when(caixas.caixaIsAberto()).thenReturn(true);
+        when(caixas.caixaAberto()).thenReturn(Optional.of(new Caixa()));
+
+        try (MockedStatic<net.originmobi.pdv.singleton.Aplicacao> app =
+                 mockStatic(net.originmobi.pdv.singleton.Aplicacao.class)) {
+            net.originmobi.pdv.singleton.Aplicacao aplicacaoMock = mock(net.originmobi.pdv.singleton.Aplicacao.class);
+            app.when(net.originmobi.pdv.singleton.Aplicacao::getInstancia).thenReturn(aplicacaoMock);
+            when(aplicacaoMock.getUsuarioAtual()).thenReturn("tester");
+            when(usuarios.buscaUsuario("tester")).thenReturn(new Usuario());
+
+            doThrow(new RuntimeException("falhou fechar"))
+                .when(vendas).fechaVenda(eq(codVenda), eq(VendaSituacao.FECHADA),
+                                         anyDouble(), anyDouble(), anyDouble(),
+                                         any(java.sql.Timestamp.class), eq(forma));
+
+            RuntimeException ex = assertThrows(RuntimeException.class, () ->
+                vendaService.fechaVenda(codVenda, codForma, 200.0, 0.0, 0.0, vlParcelas, titulos)
+            );
+            assertEquals("Erro ao fechar a venda, chame o suporte", ex.getMessage());
+        }
+    }
+
+    @Test
+    @DisplayName("aprazo(): parcela vazia deve retornar 'valor de recebimento invalido'")
+    void aprazo_quandoParcelaVazia_deveRetornarMensagem() {
+        Long codVenda = 82L, codForma = 820L;
+        String[] vlParcelas = { "" }; 
+        String[] titulos = { "1" };
+
+        Venda venda = mock(Venda.class);
+        when(vendas.findByCodigoEquals(codVenda)).thenReturn(venda);
+        when(venda.isAberta()).thenReturn(true);
+        
+        when(venda.getPessoa()).thenReturn(new Pessoa());
+
+        PagamentoTipo forma = new PagamentoTipo();
+        forma.setCodigo(codForma);
+        forma.setFormaPagamento("30"); 
+        when(formaPagamentos.busca(codForma)).thenReturn(forma);
+
+        when(tituloService.busca(1L)).thenReturn(Optional.of(mock(Titulo.class)));
+
+        RuntimeException ex = assertThrows(RuntimeException.class, () ->
+            vendaService.fechaVenda(codVenda, codForma, 100.0, 0.0, 0.0, vlParcelas, titulos)
+        );
+        assertEquals("valor de recebimento invalido", ex.getMessage());
+    }
+
+    @Test
+    @DisplayName("avistaDinheiro(): soma das parcelas diferente do total deve retornar mensagem de diferença")
+    void avistaDinheiro_quandoSomaParcelasDiferenteTotal_deveRetornarMensagem() {
+        Long codVenda = 81L, codForma = 810L;
+        String[] vlParcelas = { "50.00" }; 
+        String[] titulos = { "1" };
+
+        Venda venda = mock(Venda.class);
+        when(vendas.findByCodigoEquals(codVenda)).thenReturn(venda);
+        when(venda.isAberta()).thenReturn(true);
+        when(venda.getPessoa()).thenReturn(new Pessoa());
+
+        PagamentoTipo forma = new PagamentoTipo();
+        forma.setCodigo(codForma);
+        forma.setFormaPagamento("00");
+        when(formaPagamentos.busca(codForma)).thenReturn(forma);
+
+        Titulo titulo = mock(Titulo.class);
+        net.originmobi.pdv.model.TituloTipo tt = mock(net.originmobi.pdv.model.TituloTipo.class);
+        when(titulo.getTipo()).thenReturn(tt);
+        when(tt.getSigla()).thenReturn(TituloTipo.DIN.toString());
+        when(tituloService.busca(1L)).thenReturn(Optional.of(titulo));
+
+        when(caixas.caixaIsAberto()).thenReturn(true);
+
+        RuntimeException ex = assertThrows(RuntimeException.class, () ->
+            vendaService.fechaVenda(codVenda, codForma, 100.0, 0.0, 0.0, vlParcelas, titulos)
+        );
+        assertEquals("Valor das parcelas diferente do valor total de produtos, verifique", ex.getMessage());
+
+        verifyNoInteractions(lancamentos, cartaoLancamento, parcelas);
+    }
+
+    @Test
+    @DisplayName("avistaDinheiro(): parcela vazia deve retornar 'Parcela sem valor, verifique'")
+    void avistaDinheiro_quandoParcelaVazia_deveRetornarMensagem() {
+        Long codVenda = 80L, codForma = 800L;
+        String[] vlParcelas = { "" }; 
+        String[] titulos = { "1" };
+
+        Venda venda = mock(Venda.class);
+        when(vendas.findByCodigoEquals(codVenda)).thenReturn(venda);
+        when(venda.isAberta()).thenReturn(true);
+        when(venda.getPessoa()).thenReturn(new Pessoa());
+
+        PagamentoTipo forma = new PagamentoTipo();
+        forma.setCodigo(codForma);
+        forma.setFormaPagamento("00"); 
+        when(formaPagamentos.busca(codForma)).thenReturn(forma);
+
+        Titulo titulo = mock(Titulo.class);
+        net.originmobi.pdv.model.TituloTipo tt = mock(net.originmobi.pdv.model.TituloTipo.class);
+        when(titulo.getTipo()).thenReturn(tt);
+        when(tt.getSigla()).thenReturn(TituloTipo.DIN.toString());
+        when(tituloService.busca(1L)).thenReturn(Optional.of(titulo));
+
+        when(caixas.caixaIsAberto()).thenReturn(true);
+
+        RuntimeException ex = assertThrows(RuntimeException.class, () ->
+            vendaService.fechaVenda(codVenda, codForma, 100.0, 0.0, 0.0, vlParcelas, titulos)
+        );
+        assertEquals("Parcela sem valor, verifique", ex.getMessage());
+
+        verifyNoInteractions(lancamentos, cartaoLancamento, parcelas);
     }
 
 }
