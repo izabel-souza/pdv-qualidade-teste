@@ -123,56 +123,69 @@ class NotaFiscalServiceTest {
     
     @Test
     @DisplayName("Teste do método salvaXML(String xml, String chaveNfe)")
-    void salvaArquivoXML() throws Exception {
-    	
-        //objeto da classe NotaFiscalService
+    void salvaArquivoXML() {
+
+        // objeto da classe NotaFiscalService
         NotaFiscalService service = new NotaFiscalService();
 
-        //dados testes que são passados como parâmetros ao chamar o método
+        // dados de teste que são passados como parâmetros ao chamar o método
         String xml = "<nfe>conteudo</nfe>";
         String chave = "teste123";
 
-        //chama o método salvaXML(String xml, String chaveNfe) de NotaFiscalService
-        service.salvaXML(xml, chave);
+        try {
+            // chama o método salvaXML(String xml, String chaveNfe) de NotaFiscalService
+            service.salvaXML(xml, chave);
 
-        //verifica se o arquivo foi criado
-        File file = new File(new File(".").getCanonicalPath() + "/src/main/resources/xmlNfe/" + chave + ".xml");
-        
-        //verificação de resultado do teste
-        assertTrue(file.exists());
+            // verifica se o arquivo foi criado
+            File file = new File(new File(".").getCanonicalPath() + "/src/main/resources/xmlNfe/" + chave + ".xml");
 
-        //deleta arquivo
-        file.delete();
+            // verificação de resultado do teste
+            assertTrue(file.exists());
+
+            // deleta arquivo criado após o teste
+            file.delete();
+
+        } catch (Exception e) {
+            fail("Erro inesperado ao salvar XML: " + e.getMessage());
+        }
     }
+
 
     
     @Test
     @DisplayName("Teste do método removeXml(String chave_acesso)")
-    void removeArquivoXMLExistente() throws Exception {
-    	
-        //objeto da classe NotaFiscalService
+    void removeArquivoXMLExistente() {
+
+        // objeto da classe NotaFiscalService
         NotaFiscalService service = new NotaFiscalService();
 
-        //dado teste que é passado como parâmetro ao chamar o método
+        // dado de teste que é passado como parâmetro ao chamar o método
         String chave = "remover123";
-     
-        //cria objeto File que aponta para o arquivo com chave_acesso "remover123"
-        File file = new File(new File(".").getCanonicalPath() + "/src/main/resources/xmlNfe/" + chave + ".xml");
 
-        // cria arquivo de teste manualmente
-        file.getParentFile().mkdirs();
-        try (FileWriter fw = new FileWriter(file)) {
-            fw.write("<nfe>teste</nfe>");
+        try {
+            // cria objeto File que aponta para o arquivo com chave_acesso "remover123"
+            File file = new File(new File(".").getCanonicalPath() + "/src/main/resources/xmlNfe/" + chave + ".xml");
+
+            // cria arquivo de teste manualmente
+            file.getParentFile().mkdirs();
+            try (FileWriter fw = new FileWriter(file)) {
+                fw.write("<nfe>teste</nfe>");
+            }
+
+            // verifica se o arquivo existe antes da remoção
+            assertTrue(file.exists());
+
+            // chama o método para deletar o arquivo
+            service.removeXml(chave);
+
+            // verifica se o arquivo foi realmente removido
+            assertFalse(file.exists());
+
+        } catch (Exception e) {
+            fail("Erro inesperado ao remover XML: " + e.getMessage());
         }
-
-        //verifica se o arquivo existe
-        assertTrue(file.exists());
-
-        //chama método para deletar o arquivo
-        service.removeXml(chave);
-
-        assertFalse(file.exists());
     }
+
     
     
     @Test
