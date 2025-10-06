@@ -65,9 +65,9 @@ class VendaServiceTest {
 
     @Test
     @DisplayName("abreVenda(): se venda não tiver código deve preencher campos padrão, buscar usuário e salvar")
-    void abreVenda_quandoSemCodigo_devePreencherCamposBuscarUsuarioESalvar() {
-        
-        Venda venda = new Venda(); 
+    void testAbreVenda_SemCodigo_PreencheCamposBuscaUsuarioESalva() {
+
+        Venda venda = new Venda();
 
         try (MockedStatic<net.originmobi.pdv.singleton.Aplicacao> app =
                  mockStatic(net.originmobi.pdv.singleton.Aplicacao.class)) {
@@ -99,11 +99,10 @@ class VendaServiceTest {
             verify(vendas, never()).updateDadosVenda(any(), any(), any());
         }
     }
- 
-    
+
     @Test
     @DisplayName("abreVenda(): se venda já possuir código deve chamar updateDadosVenda")
-    void abreVenda_quandoExisteCodigo_deveAtualizarDados() {
+    void testAbreVenda_ExisteCodigo_AtualizaDados() {
         Venda venda = new Venda();
         venda.setCodigo(10L);
         Pessoa pessoa = new Pessoa();
@@ -119,7 +118,7 @@ class VendaServiceTest {
 
     @Test
     @DisplayName("busca(): se filter tiver código deve chamar findByCodigoIn")
-    void busca_quandoFilterTemCodigo_deveChamarFindByCodigoIn() {
+    void testBusca_FilterTemCodigo_ChamaFindByCodigoIn() {
         VendaFilter filter = new VendaFilter();
         filter.setCodigo(123L);
         Pageable pageable = mock(Pageable.class);
@@ -134,7 +133,7 @@ class VendaServiceTest {
 
     @Test
     @DisplayName("busca(): se filter não tiver código deve chamar findBySituacaoEquals(ABERTA)")
-    void busca_quandoFilterSemCodigo_deveChamarFindBySituacao() {
+    void testBusca_FilterSemCodigo_ChamaFindBySituacao() {
         VendaFilter filter = new VendaFilter();
         Pageable pageable = mock(Pageable.class);
         Page<Venda> page = mock(Page.class);
@@ -145,10 +144,10 @@ class VendaServiceTest {
         assertSame(page, result);
         verify(vendas).findBySituacaoEquals(eq(VendaSituacao.ABERTA), eq(pageable));
     }
-    
+
     @Test
     @DisplayName("busca(): se situacao != 'ABERTA' deve chamar findBySituacaoEquals(FECHADA)")
-    void busca_quandoSituacaoFechada_deveChamarFindBySituacaoFechada() {
+    void testBusca_SituacaoFechada_ChamaFindBySituacaoFechada() {
         VendaFilter filter = new VendaFilter(); // sem código
         Pageable pageable = mock(Pageable.class);
         Page<Venda> page = mock(Page.class);
@@ -162,7 +161,7 @@ class VendaServiceTest {
 
     @Test
     @DisplayName("addProduto(): se venda estiver ABERTA deve salvar produto e retornar 'ok'")
-    void addProduto_quandoVendaAberta_deveSalvarERetornarOk() {
+    void testAddProduto_VendaAberta_SalvaERetornaOk() {
         when(vendas.verificaSituacao(1L)).thenReturn(VendaSituacao.ABERTA.toString());
 
         String r = vendaService.addProduto(1L, 2L, 10.5);
@@ -173,7 +172,7 @@ class VendaServiceTest {
 
     @Test
     @DisplayName("addProduto(): se venda estiver FECHADA deve retornar 'Venda fechada'")
-    void addProduto_quandoVendaFechada_deveRetornarMensagemVendaFechada() {
+    void testAddProduto_VendaFechada_RetornaMensagem() {
         when(vendas.verificaSituacao(1L)).thenReturn(VendaSituacao.FECHADA.toString());
 
         String r = vendaService.addProduto(1L, 2L, 10.5);
@@ -184,7 +183,7 @@ class VendaServiceTest {
 
     @Test
     @DisplayName("removeProduto(): se venda estiver ABERTA deve remover produto e retornar 'ok'")
-    void removeProduto_quandoVendaAberta_deveRemoverERetornarOk() {
+    void testRemoveProduto_VendaAberta_RemoveERetornaOk() {
         Venda venda = mock(Venda.class);
         when(vendas.findByCodigoEquals(99L)).thenReturn(venda);
         when(venda.getSituacao()).thenReturn(VendaSituacao.ABERTA);
@@ -197,7 +196,7 @@ class VendaServiceTest {
 
     @Test
     @DisplayName("removeProduto(): se venda estiver FECHADA deve retornar 'Venda fechada'")
-    void removeProduto_quandoVendaFechada_deveRetornarMensagemVendaFechada() {
+    void testRemoveProduto_VendaFechada_RetornaMensagem() {
         Venda venda = mock(Venda.class);
         when(vendas.findByCodigoEquals(99L)).thenReturn(venda);
         when(venda.getSituacao()).thenReturn(VendaSituacao.FECHADA);
@@ -210,7 +209,7 @@ class VendaServiceTest {
 
     @Test
     @DisplayName("lista(): deve retornar vendas do repository (findAll)")
-    void lista_deveDelegarAoRepository() {
+    void testLista_RetornaVendas() {
         List<Venda> todas = Arrays.asList(new Venda(), new Venda());
         when(vendas.findAll()).thenReturn(todas);
 
@@ -219,14 +218,14 @@ class VendaServiceTest {
 
     @Test
     @DisplayName("qtdAbertos(): deve retornar total de vendas em aberto")
-    void qtdAbertos_deveRetornarTotalDeVendasEmAberto() {
+    void testQtdAbertos_RetornaTotalDeVendasEmAberto() {
         when(vendas.qtdVendasEmAberto()).thenReturn(42);
         assertEquals(42, vendaService.qtdAbertos());
     }
-    
+
     @Test
     @DisplayName("fechaVenda(): se for à vista (00) com DIN e caixa aberto deve fechar venda, lançar no caixa e movimentar estoque")
-    void fechaVenda_fluxoVistaDinheiro_comSucesso_deveFecharVenda_movimentarEstoque_eRetornarMensagem() {
+    void testFechaVenda_fluxoVistaDinheiro_FechaVenda() {
         Long codVenda = 7L;
         Long codForma = 100L;
         double vlProdutos = 200.00;
@@ -280,7 +279,7 @@ class VendaServiceTest {
 
     @Test
     @DisplayName("fechaVenda(): se venda não estiver aberta deve retornar 'venda fechada'")
-    void fechaVenda_quandoVendaFechada_deveLancarExcecao() {
+    void testFechaVenda_VendaFechada_RetornaMensagem() {
         Long codVenda = 1L;
         Venda venda = mock(Venda.class);
         when(vendas.findByCodigoEquals(codVenda)).thenReturn(venda);
@@ -293,7 +292,7 @@ class VendaServiceTest {
 
     @Test
     @DisplayName("fechaVenda(): se valor de produtos <= 0 deve retornar 'Venda sem valor, verifique'")
-    void fechaVenda_quandoValorProdutoInvalido_deveLancarExcecao() {
+    void testFechaVenda_ValorProdutoInvalido_RetornaMensagem() {
         Long codVenda = 1L;
         Venda venda = mock(Venda.class);
         when(vendas.findByCodigoEquals(codVenda)).thenReturn(venda);
@@ -306,7 +305,7 @@ class VendaServiceTest {
 
     @Test
     @DisplayName("fechaVenda(): se for à vista (00) com DIN e caixa fechado deve retornar 'nenhum caixa aberto'")
-    void fechaVenda_quandoCaixaFechadoParaVistaDinheiro_deveLancarExcecao() {
+    void testFechaVenda_CaixaFechadoAVistaDinheiro_RetornaMensagem() {
         Long codVenda = 2L;
         Venda venda = mock(Venda.class);
         when(vendas.findByCodigoEquals(codVenda)).thenReturn(venda);
@@ -314,7 +313,7 @@ class VendaServiceTest {
         when(venda.getPessoa()).thenReturn(new Pessoa());
 
         PagamentoTipo forma = new PagamentoTipo();
-        forma.setFormaPagamento("00"); 
+        forma.setFormaPagamento("00");
         when(formaPagamentos.busca(20L)).thenReturn(forma);
 
         Titulo titulo = mock(Titulo.class);
@@ -329,10 +328,10 @@ class VendaServiceTest {
                 vendaService.fechaVenda(codVenda, 20L, 100.0, 0.0, 0.0, new String[]{"100.0"}, new String[]{"1"}));
         assertEquals("nenhum caixa aberto", ex.getMessage());
     }
-    
+
     @Test
     @DisplayName("fechaVenda(): se for a prazo e venda não tiver cliente deve retornar 'Venda sem cliente, verifique'")
-    void fechaVenda_quandoAprazoSemCliente_deveLancarExcecao() {
+    void testFechaVenda_AprazoSemCliente_RetornaMensagem() {
         Long codVenda = 10L, codForma = 400L;
         String[] vlParcelas = {"100.00"};
         String[] titulos = {"1"};
@@ -344,7 +343,7 @@ class VendaServiceTest {
 
         PagamentoTipo forma = new PagamentoTipo();
         forma.setCodigo(codForma);
-        forma.setFormaPagamento("30"); 
+        forma.setFormaPagamento("30");
         when(formaPagamentos.busca(codForma)).thenReturn(forma);
         when(tituloService.busca(1L)).thenReturn(Optional.of(mock(Titulo.class)));
 
@@ -356,10 +355,10 @@ class VendaServiceTest {
 
     @Test
     @DisplayName("fechaVenda(): se for a prazo deve gerar parcelas e fechar venda")
-    void fechaVenda_quandoAprazo_deveGerarParcelasEFechar() {
+    void testFechaVenda_Aprazo_GeraParcelasEFecha() {
         Long codVenda = 9L, codForma = 300L;
         String[] vlParcelas = {"100.00", "100.00"};
-        String[] titulos = {"1","2"}; 
+        String[] titulos = {"1","2"};
         Venda venda = mock(Venda.class);
         when(vendas.findByCodigoEquals(codVenda)).thenReturn(venda);
         when(venda.isAberta()).thenReturn(true);
@@ -367,7 +366,7 @@ class VendaServiceTest {
 
         PagamentoTipo forma = new PagamentoTipo();
         forma.setCodigo(codForma);
-        forma.setFormaPagamento("30/60"); 
+        forma.setFormaPagamento("30/60");
         when(formaPagamentos.busca(codForma)).thenReturn(forma);
 
         when(tituloService.busca(anyLong())).thenReturn(Optional.of(mock(Titulo.class)));
@@ -378,13 +377,13 @@ class VendaServiceTest {
         verify(parcelas, atLeast(2)).gerarParcela(anyDouble(), anyDouble(), anyDouble(), anyDouble(), anyDouble(),
                 any(Receber.class), anyInt(), anyInt(), any(), any());
         verify(vendas, atLeastOnce()).fechaVenda(eq(codVenda), eq(VendaSituacao.FECHADA), eq(Double.valueOf(200.00)),
-        		eq(Double.valueOf(0.0)), eq(Double.valueOf(0.0)), any(java.sql.Timestamp.class), eq(forma));
+                eq(Double.valueOf(0.0)), eq(Double.valueOf(0.0)), any(java.sql.Timestamp.class), eq(forma));
         verify(produtos).movimentaEstoque(eq(codVenda), eq(EntradaSaida.SAIDA));
     }
 
     @Test
     @DisplayName("fechaVenda(): se for à vista (00) com CARTDEB/CARTCRED deve lançar no cartão")
-    void fechaVenda_quandoCartao_deveChamarCartaoLancamento() {
+    void testFechaVenda_Cartao_ChamaCartaoLancamento() {
         Long codVenda = 8L, codForma = 200L;
         String[] vlParcelas = {"150.00"};
         String[] titulos = {"1"};
@@ -402,20 +401,20 @@ class VendaServiceTest {
         Titulo titulo = mock(Titulo.class);
         net.originmobi.pdv.model.TituloTipo tt = mock(net.originmobi.pdv.model.TituloTipo.class);
         when(titulo.getTipo()).thenReturn(tt);
-        when(tt.getSigla()).thenReturn(TituloTipo.CARTDEB.toString()); 
+        when(tt.getSigla()).thenReturn(TituloTipo.CARTDEB.toString());
         when(tituloService.busca(1L)).thenReturn(Optional.of(titulo));
 
         String msg = vendaService.fechaVenda(codVenda, codForma, 150.00, 0.0, 0.0, vlParcelas, titulos);
 
         assertEquals("Venda finalizada com sucesso", msg);
-        verify(cartaoLancamento).lancamento(eq(150.00), any()); 
-        verify(lancamentos, never()).lancamento(any(CaixaLancamento.class)); 
+        verify(cartaoLancamento).lancamento(eq(150.00), any());
+        verify(lancamentos, never()).lancamento(any(CaixaLancamento.class));
         verify(produtos).movimentaEstoque(eq(codVenda), eq(EntradaSaida.SAIDA));
     }
-    
+
     @Test
     @DisplayName("fechaVenda(): se falhar ao cadastrar o Receber deve retornar 'Erro ao fechar a venda, chame o suporte'")
-    void fechaVenda_quandoFalhaAoCadastrarReceber_deveRetornarErro() {
+    void testFechaVenda_FalhaAoCadastrarReceber_RetornaErro() {
         Long codVenda = 55L, codForma = 500L;
         Venda venda = mock(Venda.class);
         when(vendas.findByCodigoEquals(codVenda)).thenReturn(venda);
@@ -424,7 +423,7 @@ class VendaServiceTest {
 
         PagamentoTipo forma = new PagamentoTipo();
         forma.setCodigo(codForma);
-        forma.setFormaPagamento("00"); 
+        forma.setFormaPagamento("00");
         when(formaPagamentos.busca(codForma)).thenReturn(forma);
 
         doThrow(new RuntimeException("falha qualquer"))
@@ -439,7 +438,7 @@ class VendaServiceTest {
 
     @Test
     @DisplayName("fechaVenda(): se falhar ao fechar a venda deve retornar 'Erro ao fechar a venda, chame o suporte'")
-    void fechaVenda_quandoFalhaAoFechar_deveRetornarErro() {
+    void testFechaVenda_FalhaAoFechar_RetornaErro() {
         Long codVenda = 66L, codForma = 600L;
         String[] vlParcelas = {"200.00"};
         String[] titulos = {"1"};
@@ -484,20 +483,20 @@ class VendaServiceTest {
 
     @Test
     @DisplayName("aprazo(): parcela vazia deve retornar 'valor de recebimento invalido'")
-    void aprazo_quandoParcelaVazia_deveRetornarMensagem() {
+    void testAprazo_ParcelaVazia_RetornaMensagem() {
         Long codVenda = 82L, codForma = 820L;
-        String[] vlParcelas = { "" }; 
+        String[] vlParcelas = { "" };
         String[] titulos = { "1" };
 
         Venda venda = mock(Venda.class);
         when(vendas.findByCodigoEquals(codVenda)).thenReturn(venda);
         when(venda.isAberta()).thenReturn(true);
-        
+
         when(venda.getPessoa()).thenReturn(new Pessoa());
 
         PagamentoTipo forma = new PagamentoTipo();
         forma.setCodigo(codForma);
-        forma.setFormaPagamento("30"); 
+        forma.setFormaPagamento("30");
         when(formaPagamentos.busca(codForma)).thenReturn(forma);
 
         when(tituloService.busca(1L)).thenReturn(Optional.of(mock(Titulo.class)));
@@ -510,9 +509,9 @@ class VendaServiceTest {
 
     @Test
     @DisplayName("avistaDinheiro(): soma das parcelas diferente do total deve retornar mensagem de diferença")
-    void avistaDinheiro_quandoSomaParcelasDiferenteTotal_deveRetornarMensagem() {
+    void testAvistaDinheiro_SomaParcelasDiferenteTotal_RetornaMensagem() {
         Long codVenda = 81L, codForma = 810L;
-        String[] vlParcelas = { "50.00" }; 
+        String[] vlParcelas = { "50.00" };
         String[] titulos = { "1" };
 
         Venda venda = mock(Venda.class);
@@ -543,9 +542,9 @@ class VendaServiceTest {
 
     @Test
     @DisplayName("avistaDinheiro(): parcela vazia deve retornar 'Parcela sem valor, verifique'")
-    void avistaDinheiro_quandoParcelaVazia_deveRetornarMensagem() {
+    void testAvistaDinheiro_ParcelaVazia_RetornaMensagem() {
         Long codVenda = 80L, codForma = 800L;
-        String[] vlParcelas = { "" }; 
+        String[] vlParcelas = { "" };
         String[] titulos = { "1" };
 
         Venda venda = mock(Venda.class);
@@ -555,7 +554,7 @@ class VendaServiceTest {
 
         PagamentoTipo forma = new PagamentoTipo();
         forma.setCodigo(codForma);
-        forma.setFormaPagamento("00"); 
+        forma.setFormaPagamento("00");
         when(formaPagamentos.busca(codForma)).thenReturn(forma);
 
         Titulo titulo = mock(Titulo.class);
