@@ -35,7 +35,8 @@ public class AjusteServiceTest {
 
     @BeforeEach
     void setup() {
-        ajusteService = new AjusteService();
+		// Instancia a classe AjusteService
+        ajusteService = new AjusteService(); 
         ajusteRepositoryMock = mock(AjusteRepository.class);
         produtoServiceMock = mock(ProdutoService.class);
 
@@ -47,7 +48,7 @@ public class AjusteServiceTest {
     @Test
     @DisplayName("Cria um novo ajuste com status 'APROCESSAR'")
     void testeAjusteStatusAPROCESSAR() {
-    	// Mock do singleton da Aplicação
+    	// Mock que simula a autenticação de usuario_teste
         Authentication autenticacaoMock = mock(Authentication.class);
         when(autenticacaoMock.getName()).thenReturn("usuario_teste");
         
@@ -56,6 +57,7 @@ public class AjusteServiceTest {
         
         SecurityContextHolder.setContext(contextoMock);
 
+		// Mock do repositório salvando um novo ajuste realizado
         Ajuste novoAjuste = new Ajuste();
         novoAjuste.setCodigo(1L);
         novoAjuste.setStatus(AjusteStatus.APROCESSAR);
@@ -63,32 +65,38 @@ public class AjusteServiceTest {
         when(ajusteRepositoryMock.save(any(Ajuste.class))).thenReturn(novoAjuste);
 
         Long codigoCriado = ajusteService.novo();
-        
+
+		// Valida se o código retornado pelo método novo() é o esperado
         assertNotNull(codigoCriado);
         assertEquals(1L, codigoCriado);
     }
     
     @Test
-    @DisplayName("Busca um ajuste realizado pelo código")
+    @DisplayName("Busca um ajuste realizado pelo código")  // Se o método busca() retorna um ajuste existente
     void buscaAjustePorCodigo() {
+		// Cria um ajuste mockado
     	Ajuste ajuste = new Ajuste();
     	ajuste.setCodigo(5L);
     	
+		// Simula a busca por ID
     	when(ajusteRepositoryMock.findById(5L)).thenReturn(Optional.of(ajuste));
     	
     	Optional<Ajuste> resultado = ajusteService.busca(5L);
     	
+		// Valida se o ID retornado é o esperado
     	assertTrue(resultado.isPresent());
     	assertEquals(5L, resultado.get().getCodigo());
     }
     
     @Test
-    @DisplayName("Testa se não remove ajuste já processado")
+    @DisplayName("Testa se não remove ajuste já processado")  // Garante que não é possível remover um ajuste com o status PROCESSADO
     void testeSeNaoRemoveAjusteProcessado() {
+		// Cria um ajuste mockado
     	Ajuste ajuste = new Ajuste();
     	ajuste.setCodigo(10L);
     	ajuste.setStatus(AjusteStatus.PROCESSADO);
     	
+		// Espera que o método remover() lance uma exceção
     	RuntimeException excecao = assertThrows(RuntimeException.class, () -> {
     		ajusteService.remover(ajuste);
     	});
@@ -97,14 +105,16 @@ public class AjusteServiceTest {
     }
     
     @Test
-    @DisplayName("Testa se remove ajuste já processado")
+    @DisplayName("Testa se remove ajuste já processado")  // Testa se é possível remover um ajuste com status APROCESSAR
     void testeSeRemoveAjusteProcessado() {
+		// Cria um ajuste mockado
     	Ajuste ajuste = new Ajuste();
     	ajuste.setCodigo(10L);
     	ajuste.setStatus(AjusteStatus.APROCESSAR);
     	
     	doNothing().when(ajusteRepositoryMock).deleteById(10L);
     	
+		// Verifica que não foi lançada nenhuma exceção após a simulação de uma deleção no repositório
     	assertDoesNotThrow(() -> ajusteService.remover(ajuste));
     	verify(ajusteRepositoryMock, times(1)).deleteById(10L);
     }
@@ -121,11 +131,13 @@ public class AjusteServiceTest {
     	ajusteProduto.setProduto(produto);
     	ajusteProduto.setQtd_alteracao(10); // Se positivo, significa que houve a entrada de um produto
     	
+		// Cria um ajuste mockado com um projeto que teve entrada de estoque
     	Ajuste ajuste = new Ajuste();
     	ajuste.setCodigo(codigoAjuste);
     	ajuste.setStatus(AjusteStatus.APROCESSAR);
     	ajuste.setProdutos(Collections.singletonList(ajusteProduto));
     	
+		// Mock do comportamento do repositório e do serviço de produto
     	when(ajusteRepositoryMock.findById(codigoAjuste)).thenReturn(Optional.of(ajuste));
     	when(ajusteRepositoryMock.save(any(Ajuste.class))).thenReturn(ajuste);
     	
@@ -137,6 +149,7 @@ public class AjusteServiceTest {
     			any(Date.class)
     	);
     	
+		// Processa o ajuste e verifica se o estoque foi ajustado
     	String resultado = ajusteService.processar(codigoAjuste,  "Ajuste simples");
     	
     	assertEquals("Ajuste realizado com sucesso", resultado);
@@ -150,10 +163,11 @@ public class AjusteServiceTest {
     	verify(ajusteRepositoryMock).save(any(Ajuste.class));
     }
     
-    @SuppressWarnings("unchecked") // Remove o aviso do compilador que era exibido na linha 161
+    @SuppressWarnings("unchecked") // Remove o aviso do compilador que era exibido na linha 174
     @Test
-    @DisplayName("Lista com filtro de código")
+    @DisplayName("Testa a lista com filtro de código")
     void testeListaComFiltroCodigo() {
+		// Mocka uma consulta paginada com filtro de código e verifica se o retorno é o esperado
     	AjusteFilter filtro = new AjusteFilter();
     	filtro.setCodigo(123L);
     	Pageable pageable = mock(Pageable.class);
