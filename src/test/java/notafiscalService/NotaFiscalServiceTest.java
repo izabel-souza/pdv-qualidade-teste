@@ -81,7 +81,7 @@ class NotaFiscalServiceTest {
 
     @Test
     @DisplayName("Teste do método busca(codnota)")
-    void deveBuscarNotaFiscalPorCodigo() {
+    void buscaNotaFiscalPorCodigo() {
     	
     	//mock do NotaFiscalRepository
         NotaFiscalRepository mockNFeRepo = mock(NotaFiscalRepository.class);
